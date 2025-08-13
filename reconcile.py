@@ -209,10 +209,16 @@ class CompanyReconciler:
         name = re.sub(r'\bsystems?\b', 'systems', name)
         name = re.sub(r'\bsolutions?\b', 'solutions', name)
         
-        # Normalize whitespace and dots
-        name = re.sub(r'\.+', '.', name)  # Multiple dots to single dot
+        # Normalize whitespace first
         name = re.sub(r'\s+', ' ', name.strip())
-        name = re.sub(r'\s*\.\s*', '.', name)  # Spaces around dots
+        
+        # Remove dots that are not part of domain names (.com, .net, etc)
+        # Keep dots only if followed by common domain extensions
+        name = re.sub(r'\.(?!com|net|org|edu|gov|co\b)', '', name)
+        
+        # Clean up any remaining multiple dots and spaces around dots
+        name = re.sub(r'\.+', '.', name)
+        name = re.sub(r'\s*\.\s*', '.', name)
         
         return name.strip()
     
@@ -397,13 +403,14 @@ class CompanyReconciler:
             return []
         
         try:
-            # Get ALL companies in same country for better context
-            same_country_companies = self.data['master'][
-                self.data['master']['company_country'] == attendee_country
-            ]['company_name'].tolist()
+            # Get ALL companies from database with country information
+            all_companies = []
+            for _, company in self.data['master'].iterrows():
+                company_with_country = f"{company['company_name']}({company['company_country']})"
+                all_companies.append(company_with_country)
             
-            # Create better context with exact company names from our database
-            company_context = ', '.join(same_country_companies[:15])  # Show more examples
+            # Create context with company names and countries
+            company_context = ', '.join(all_companies[:20])  # Show more examples across countries
             
             prompt = f"""
 You are helping correct a misspelled company name to match our exact database.
@@ -412,24 +419,28 @@ Misspelled name: "{attendee_name}"
 Country: "{attendee_country}"
 Email domain: "{domain}"
 
-Our database contains these EXACT company names for {attendee_country}:
+Our database contains these EXACT company names with countries:
 {company_context}
 
-Task: Suggest 5 possible corrections for "{attendee_name}" that might match our database entries above.
-Focus on:
-1. Simple typo corrections (missing/extra letters)
-2. Common abbreviations or full names
-3. Include exact suffixes like ".com Inc." if relevant
-4. Consider the email domain "{domain}" as a hint
+Task: Suggest 5 DIFFERENT possible corrections for "{attendee_name}" that might match our database entries above.
+Focus on diverse suggestions:
+1. Most likely typo correction (primary suggestion)
+2. Alternative spelling or abbreviation variations
+3. Consider variations with different legal suffixes
+4. Use the email domain "{domain}" as a hint for secondary suggestions
+5. If needed, include other relevant companies from {attendee_country} or similar industries
 
-Return ONLY company names (no explanations), one per line:
+CRITICAL: Each of the 5 suggestions must be DIFFERENT. Do not repeat the same company name.
+Return in this format: CompanyName(Country)
+Each suggestion on a separate line.
+Provide variety in your suggestions, not just the most obvious match repeated.
 """
             
-            # Generate with settings optimized for accuracy
+            # Generate with settings optimized for accuracy and diversity
             response = self.model.generate_content(
                 prompt,
                 generation_config=genai.types.GenerationConfig(
-                    temperature=0.1,  # Low temperature for consistent results
+                    temperature=0.3,  # Slightly higher temperature for diverse suggestions
                     max_output_tokens=300
                 )
             )
@@ -448,7 +459,7 @@ Return ONLY company names (no explanations), one per line:
         
         # First try Gemini if enabled
         if self.gemini_enabled:
-            gemini_result = self._try_gemini_matching(attendee_row)
+            gemini_result, suggestions = self._try_gemini_matching(attendee_row)
             if gemini_result:
                 return gemini_result
         
@@ -467,7 +478,7 @@ Return ONLY company names (no explanations), one per line:
         
         suggestions = self._get_gemini_suggestions(attendee_name, attendee_country, domain)
         if not suggestions:
-            return None
+            return None, []
         
         # Try to match suggestions against master list
         same_country = self.data['master'][
@@ -476,13 +487,23 @@ Return ONLY company names (no explanations), one per line:
         
         best_match = None
         best_score = 0
+        suggestions_text = "; ".join(suggestions)
         
         for suggestion in suggestions:
-            normalized_suggestion = self._normalize_name(suggestion)
+            # Extract company name and country from format: CompanyName(Country)
+            if '(' in suggestion and suggestion.endswith(')'):
+                company_part = suggestion.split('(')[0].strip()
+                country_part = suggestion.split('(')[1].rstrip(')')
+            else:
+                company_part = suggestion
+                country_part = attendee_country  # fallback to attendee country
             
-            # Check exact match first
-            exact_matches = same_country[
-                same_country['normalized_company'] == normalized_suggestion
+            normalized_suggestion = self._normalize_name(company_part)
+            
+            # Check exact match first (match both company and country)
+            exact_matches = self.data['master'][
+                (self.data['master']['normalized_company'] == normalized_suggestion) &
+                (self.data['master']['company_country'] == country_part)
             ]
             if not exact_matches.empty:
                 match = exact_matches.iloc[0]
@@ -491,41 +512,57 @@ Return ONLY company names (no explanations), one per line:
                     'parent_company_name': match['parent_company_name'],
                     'company_country': match['company_country'],
                     'match_confidence': 94,  # High confidence for Gemini + exact match
-                    'logic_used': 'R4_gemini_exact_match'
-                }
+                    'logic_used': f'R4_gemini_exact_match (suggestions: {suggestions_text})'
+                }, suggestions
             
-            # Check fuzzy match against suggestion
-            for _, company in same_country.iterrows():
+            # Check fuzzy match against suggestion (any country, then filter by attendee country)
+            for _, company in self.data['master'].iterrows():
                 score = fuzz.ratio(normalized_suggestion, company['normalized_company'])
-                if score >= 85 and score > best_score:  # Lower threshold for Gemini suggestions
+                if (score >= 85 and score > best_score and 
+                    company['company_country'] == attendee_country):  # Must match attendee country for fuzzy
                     confidence = min(score, 92)  # Cap confidence for Gemini fuzzy
                     best_match = {
                         'company_name': company['company_name'],
                         'parent_company_name': company['parent_company_name'],
                         'company_country': company['company_country'],
                         'match_confidence': confidence,
-                        'logic_used': 'R4_gemini_fuzzy_match'
+                        'logic_used': f'R4_gemini_fuzzy_match (suggestions: {suggestions_text})'
                     }
                     best_score = score
         
-        return best_match
+        return best_match, suggestions
     
     def reconcile_attendee(self, attendee_row):
         """Apply all matching rules to a single attendee."""
-        # Try rules in order
+        gemini_suggestions = []
+        
+        # Try rules in order (except gemini rule which we'll handle specially)
         for rule_func in [self.rule1_exact_company, self.rule2_exact_parent, 
-                         self.rule3_historical, self.rule4_gemini_assisted_matching]:
+                         self.rule3_historical]:
             result = rule_func(attendee_row)
             if result:
                 return result
         
-        # No match found - get Gemini suggestions for transparency
-        attendee_name = attendee_row['attendee_company_name']
-        attendee_country = attendee_row['attendee_country']
-        domain = attendee_row['domain']
+        # Try regular fuzzy matching first
+        fuzzy_result = self.rule4_fuzzy_matching(attendee_row)
+        if fuzzy_result:
+            return fuzzy_result
         
-        suggestions = self._get_gemini_suggestions(attendee_name, attendee_country, domain)
-        suggestions_text = "; ".join(suggestions) if suggestions else "No suggestions"
+        # Try Gemini rule and capture suggestions as last resort
+        if self.gemini_enabled:
+            gemini_result, suggestions = self._try_gemini_matching(attendee_row)
+            gemini_suggestions = suggestions
+            if gemini_result:
+                return gemini_result
+        
+        # No match found - use previously captured Gemini suggestions or get new ones
+        if not gemini_suggestions and self.gemini_enabled:
+            attendee_name = attendee_row['attendee_company_name']
+            attendee_country = attendee_row['attendee_country']
+            domain = attendee_row['domain']
+            gemini_suggestions = self._get_gemini_suggestions(attendee_name, attendee_country, domain)
+        
+        suggestions_text = "; ".join(gemini_suggestions) if gemini_suggestions else "No suggestions"
         
         return {
             'company_name': None,
@@ -569,7 +606,7 @@ Return ONLY company names (no explanations), one per line:
         print(f"Saved results to {output_dir}/{output_files['final_results']}")
         
         # Save unresolved cases
-        unresolved = results_df[results_df['logic_used'] == 'UNRESOLVED']
+        unresolved = results_df[results_df['logic_used'].str.startswith('UNRESOLVED')]
         unresolved.to_csv(f"{output_dir}/{output_files['unresolved']}", index=False)
         print(f"Saved {len(unresolved)} unresolved cases to {output_dir}/{output_files['unresolved']}")
         
@@ -611,7 +648,7 @@ def main():
     
     # Check if Gemini API is not working and provide helpful message
     if not reconciler.gemini_enabled:
-        unresolved_count = (results['logic_used'] == 'UNRESOLVED (Gemini suggestions: No suggestions)').sum()
+        unresolved_count = results['logic_used'].str.startswith('UNRESOLVED').sum()
         if unresolved_count > 0:
             print(f"\nNote: {unresolved_count} case(s) could be resolved with Gemini AI assistance.")
             print("To improve matching accuracy:")

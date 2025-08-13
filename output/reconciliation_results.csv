@@ -1,6 +1,6 @@
 attendee_email_address,attendee_company_name,attendee_country,company_name,parent_company_name,company_country,match_confidence,logic_used
 typo1@microsft.com,Microsft,US,Microsoft Corporation,Microsoft Corporation,US,94,R4_fuzzy_company_validated
-typo2@gogle.com,Alphabet,US,Google LLC,Alphabet Inc.,US,92,R4_fuzzy_parent_validated
-typo3@appel.com,Appel,US,,,,0,UNRESOLVED (Gemini suggestions: No suggestions)
+typo2@gogle.com,Alphabet,US,Google LLC,Alphabet Inc.,US,95,R2_exact_parent_country
+typo3@appel.com,Appel,US,Apple Inc.,Apple Inc.,US,94,R4_gemini_exact_match (suggestions: Apple Inc.(US); Appel Inc.(US); Apple Computer(US); Appel Corporation(US); Apfel Inc.(US))
 challenge1@microsoft.com,MSFT,US,Microsoft Corporation,Microsoft Corporation,US,92,R3a_hist_email_exact
 challenge2@google.com,Googel,US,Google LLC,Alphabet Inc.,US,92,R3a_hist_email_exact

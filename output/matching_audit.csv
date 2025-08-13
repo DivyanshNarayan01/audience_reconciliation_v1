@@ -1,5 +1,5 @@
 logic_used,match_confidence,count
+R2_exact_parent_country,95,1
 R3a_hist_email_exact,92,2
 R4_fuzzy_company_validated,94,1
-R4_fuzzy_parent_validated,92,1
-UNRESOLVED (Gemini suggestions: No suggestions),0,1
+R4_gemini_exact_match (suggestions: Apple Inc.(US); Appel Inc.(US); Apple Computer(US); Appel Corporation(US); Apfel Inc.(US)),94,1
