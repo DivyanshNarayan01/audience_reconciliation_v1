@@ -1,0 +1,7 @@
+pandas
+rapidfuzz
+pyarrow
+tldextract
+pyyaml
+python-dotenv
+google-generativeai

@@ -1,0 +1,4 @@
+logic_used,match_confidence,count
+R1_exact_company_country,100,2
+R3b_hist_domain_company,90,2
+R4_gemini_exact_match,94,36

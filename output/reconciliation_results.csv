@@ -1,0 +1,41 @@
+attendee_email_address,attendee_company_name,attendee_country,company_name,parent_company_name,company_country,match_confidence,logic_used
+typo1@microsft.com,Microsft,US,Microsoft Corporation,Microsoft Corporation,US,94,R4_gemini_exact_match
+typo2@gogle.com,Alphabet,US,Google LLC,Alphabet Inc.,US,94,R4_gemini_exact_match
+typo3@appel.com,Appel,US,Apple Inc.,Apple Inc.,US,94,R4_gemini_exact_match
+typo4@amazn.com,Amazn,US,Amazon.com Inc.,Amazon.com Inc.,US,94,R4_gemini_exact_match
+typo5@faceboook.com,Faceboook,US,Meta Platforms Inc.,Meta Platforms Inc.,US,94,R4_gemini_exact_match
+typo6@teslla.com,Teslla,US,Tesla Inc.,Tesla Inc.,US,94,R4_gemini_exact_match
+typo7@netflixx.com,Netflixx,US,Netflix Inc.,Netflix Inc.,US,94,R4_gemini_exact_match
+typo8@salesforc.com,Salesforc,US,Salesforce Inc.,Salesforce Inc.,US,94,R4_gemini_exact_match
+typo9@nvdia.com,Nvdia,US,NVIDIA Corporation,NVIDIA Corporation,US,94,R4_gemini_exact_match
+typo10@oracl.com,Oracl,US,Oracle Corporation,Oracle Corporation,US,94,R4_gemini_exact_match
+typo11@adobbe.com,Adobbe,US,Adobe Inc.,Adobe Inc.,US,94,R4_gemini_exact_match
+typo12@intell.com,Intell,US,Intel Corporation,Intel Corporation,US,94,R4_gemini_exact_match
+typo13@ciscoo.com,Ciscoo,US,Cisco Systems Inc.,Cisco Systems Inc.,US,94,R4_gemini_exact_match
+typo14@paypalll.com,Paypalll,US,PayPal Holdings Inc.,PayPal Holdings Inc.,US,94,R4_gemini_exact_match
+typo15@samsng.kr,Samsng,KR,Samsung Electronics Co. Ltd.,Samsung Electronics Co. Ltd.,KR,94,R4_gemini_exact_match
+typo16@toyata.jp,Toyata,JP,Toyota Motor Corporation,Toyota Motor Corporation,JP,94,R4_gemini_exact_match
+typo17@asmll.nl,Asmll,NL,ASML Holding NV,ASML Holding NV,NL,94,R4_gemini_exact_match
+typo18@sapp.de,Sapp,DE,SAP SE,SAP SE,DE,94,R4_gemini_exact_match
+typo19@shopfy.ca,Shopfy,CA,Shopify Inc.,Shopify Inc.,CA,94,R4_gemini_exact_match
+typo20@microsft.com,Microsooft,US,Microsoft Corporation,Microsoft Corporation,US,94,R4_gemini_exact_match
+challenge1@microsoft.com,MSFT,US,Microsoft Corporation,Microsoft Corporation,US,90,R3b_hist_domain_company
+challenge2@google.com,Googel,US,Google LLC,Alphabet Inc.,US,90,R3b_hist_domain_company
+challenge3@apple.com,Aple,US,Apple Inc.,Apple Inc.,US,94,R4_gemini_exact_match
+challenge4@amazon.com,Amzn,US,Amazon.com Inc.,Amazon.com Inc.,US,94,R4_gemini_exact_match
+challenge5@meta.com,FB,US,Meta Platforms Inc.,Meta Platforms Inc.,US,94,R4_gemini_exact_match
+challenge6@tesla.com,Tesala,US,Tesla Inc.,Tesla Inc.,US,94,R4_gemini_exact_match
+challenge7@netflix.com,Netflx,US,Netflix Inc.,Netflix Inc.,US,94,R4_gemini_exact_match
+challenge8@salesforce.com,SalesForc,US,Salesforce Inc.,Salesforce Inc.,US,94,R4_gemini_exact_match
+challenge9@nvidia.com,nVidia,US,NVIDIA Corporation,NVIDIA Corporation,US,100,R1_exact_company_country
+challenge10@oracle.com,Orale,US,Oracle Corporation,Oracle Corporation,US,94,R4_gemini_exact_match
+challenge11@adobe.com,Adbe,US,Adobe Inc.,Adobe Inc.,US,94,R4_gemini_exact_match
+challenge12@intel.com,Intl,US,Intel Corporation,Intel Corporation,US,94,R4_gemini_exact_match
+challenge13@cisco.com,Ciso,US,Cisco Systems Inc.,Cisco Systems Inc.,US,94,R4_gemini_exact_match
+challenge14@paypal.com,PayPall,US,PayPal Holdings Inc.,PayPal Holdings Inc.,US,94,R4_gemini_exact_match
+challenge15@samsung.kr,Samung,KR,Samsung Electronics Co. Ltd.,Samsung Electronics Co. Ltd.,KR,94,R4_gemini_exact_match
+challenge16@toyota.jp,Toyoto,JP,Toyota Motor Corporation,Toyota Motor Corporation,JP,94,R4_gemini_exact_match
+challenge17@asml.nl,ASML Holdings,NL,ASML Holding NV,ASML Holding NV,NL,94,R4_gemini_exact_match
+challenge18@sap.de,S.A.P,DE,SAP SE,SAP SE,DE,94,R4_gemini_exact_match
+challenge19@shopify.ca,Shopfiy,CA,Shopify Inc.,Shopify Inc.,CA,94,R4_gemini_exact_match
+challenge20@microsoft.com,Micro-Soft,US,Microsoft Corporation,Microsoft Corporation,US,100,R1_exact_company_country
