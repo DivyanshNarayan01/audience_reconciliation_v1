@@ -1,15 +1,67 @@
 #!/usr/bin/env python3
 """
-Attendee Company Reconciliation
+Attendee Company Reconciliation - Self-Contained Setup
 
 Matches event attendees to a master company list using deterministic rules
 and optional LLM assistance for fuzzy matching.
 
+This script automatically:
+- Installs required dependencies if missing
+- Creates configuration files (.env, .config) 
+- Sets up sample data files if they don't exist
+- Provides setup instructions for Gemini API key
+
 Usage:
-    python src/reconcile.py
+    python3 reconcile.py
+
+First time setup:
+1. Run the script (it will create all necessary files)
+2. Edit .env file and add your Gemini API key
+3. Run the script again for full AI-powered matching
 """
 
+import sys
+import subprocess
 import os
+
+def install_requirements():
+    """Install required packages if they're missing."""
+    required_packages = [
+        'pandas',
+        'rapidfuzz', 
+        'pyarrow',
+        'tldextract',
+        'pyyaml',
+        'python-dotenv',
+        'google-generativeai'
+    ]
+    
+    missing_packages = []
+    
+    for package in required_packages:
+        try:
+            if package == 'python-dotenv':
+                import dotenv
+            elif package == 'google-generativeai':
+                import google.generativeai
+            elif package == 'pyyaml':
+                import yaml
+            else:
+                __import__(package)
+        except ImportError:
+            missing_packages.append(package)
+    
+    if missing_packages:
+        print("Installing missing dependencies...")
+        for package in missing_packages:
+            print(f"Installing {package}...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+        print("All dependencies installed successfully!")
+
+# Install dependencies if needed
+install_requirements()
+
+# Now import all required modules
 import re
 import pandas as pd
 import yaml
@@ -21,6 +73,88 @@ import google.generativeai as genai
 
 # Load environment variables
 load_dotenv()
+
+def setup_project_files():
+    """Create necessary project files if they don't exist."""
+    
+    # Create .env file if it doesn't exist
+    if not os.path.exists('.env'):
+        print("Creating .env file...")
+        with open('.env', 'w') as f:
+            f.write("# Add your Gemini API key here\n")
+            f.write("GEMINI_API_KEY=your_api_key_here\n")
+        print("Created .env file. Please add your Gemini API key.")
+    
+    # Create .config file if it doesn't exist
+    if not os.path.exists('.config'):
+        print("Creating .config file...")
+        config_content = """data_source: csv
+data_dir: data
+output_dir: output
+files:
+  attendees: attendee_list.csv
+  master: master_company_list.csv
+  history: historical_reconciliation.csv
+output_files:
+  final_results: reconciliation_results.csv
+  unresolved: unresolved_cases.csv
+  audit_log: matching_audit.csv
+thresholds:
+  fuzzy_company: 92
+  fuzzy_parent: 90
+confidence_caps:
+  r4_company: 94
+  r4_parent: 92
+llm:
+  provider: gemini
+  max_candidates: 10
+privacy:
+  send_email_full: false
+"""
+        with open('.config', 'w') as f:
+            f.write(config_content)
+        print("Created .config file with default settings.")
+    
+    # Create data directory and files if they don't exist
+    os.makedirs('data', exist_ok=True)
+    os.makedirs('output', exist_ok=True)
+    
+    # Create sample data files if they don't exist
+    if not os.path.exists('data/attendee_list.csv'):
+        print("Creating sample attendee_list.csv...")
+        sample_attendees = """attendee_email_address,attendee_company_name,attendee_country
+typo1@microsft.com,Microsft,US
+typo2@gogle.com,Alphabet,US
+typo3@appel.com,Appel,US
+challenge1@microsoft.com,MSFT,US
+challenge2@google.com,Googel,US"""
+        with open('data/attendee_list.csv', 'w') as f:
+            f.write(sample_attendees)
+        print("Created sample attendee_list.csv with test data.")
+    
+    if not os.path.exists('data/master_company_list.csv'):
+        print("Creating sample master_company_list.csv...")
+        sample_companies = """company_name,parent_company_name,company_country
+Microsoft Corporation,Microsoft Corporation,US
+Google LLC,Alphabet Inc.,US
+Apple Inc.,Apple Inc.,US
+Amazon.com Inc.,Amazon.com Inc.,US
+Meta Platforms Inc.,Meta Platforms Inc.,US"""
+        with open('data/master_company_list.csv', 'w') as f:
+            f.write(sample_companies)
+        print("Created sample master_company_list.csv with test data.")
+    
+    if not os.path.exists('data/historical_reconciliation.csv'):
+        print("Creating sample historical_reconciliation.csv...")
+        sample_history = """attendee_email_address,company_name,attendee_country
+challenge1@microsoft.com,Microsoft Corporation,US
+challenge2@google.com,Google LLC,US"""
+        with open('data/historical_reconciliation.csv', 'w') as f:
+            f.write(sample_history)
+        print("Created sample historical_reconciliation.csv with test data.")
+
+# Setup project files
+setup_project_files()
 
 class CompanyReconciler:
     def __init__(self, config_path=".config"):
@@ -49,6 +183,13 @@ class CompanyReconciler:
                     print(f"Warning: Could not initialize Gemini API: {e}")
             else:
                 print("Warning: GEMINI_API_KEY not found in environment variables")
+                print("Please edit the .env file and add your Gemini API key:")
+                print("GEMINI_API_KEY=your_actual_key_here")
+                print("You can get a free API key from: https://aistudio.google.com/app/apikey")
+                
+                # Check if API key is the default placeholder
+                if api_key == "your_api_key_here":
+                    print("Please replace 'your_api_key_here' with your actual Gemini API key in .env file")
     
     def _normalize_name(self, name):
         """Improved normalize company name by removing legal suffixes and special chars."""
@@ -467,6 +608,16 @@ def main():
     reconciler.save_results(results)
     
     print("Reconciliation complete!")
+    
+    # Check if Gemini API is not working and provide helpful message
+    if not reconciler.gemini_enabled:
+        unresolved_count = (results['logic_used'] == 'UNRESOLVED (Gemini suggestions: No suggestions)').sum()
+        if unresolved_count > 0:
+            print(f"\nNote: {unresolved_count} case(s) could be resolved with Gemini AI assistance.")
+            print("To improve matching accuracy:")
+            print("1. Edit .env file and add your Gemini API key")
+            print("2. Get a free API key from: https://aistudio.google.com/app/apikey")
+            print("3. Run the script again")
 
 if __name__ == "__main__":
     main()
