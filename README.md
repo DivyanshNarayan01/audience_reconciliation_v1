@@ -61,49 +61,84 @@ A single table/view with 100% match rate on current test data:
 
 ## Matching rules (in order)
 
-All rules require **same country**.
+All rules require **same country**. Names are normalized (lowercase, remove legal suffixes, handle dots).
 
-1. **R1: Exact company + country**  
-   Normalize names; exact match to `company_name`.  
-   → `R1_exact_company_country` (confidence 100)
+### **R1: Exact company + country** (confidence 100)
+Normalized attendee name exactly matches `company_name` in master list.
+```
+Examples:
+- `Microsoft Corporation` → `Microsoft Corporation` ✅
+- `microsoft corp` → `Microsoft Corporation` ✅ (normalized match)
+- `Apple` → `Apple Inc.` ✅ (legal suffix removed)
+- `Google` → `Google LLC` ✅
+```
 
-2. **R2: Exact parent + country**  
-   Normalize names; exact match to `parent_company_name`.  
-   → `R2_exact_parent_country` (95)
+### **R2: Exact parent + country** (confidence 95)  
+Normalized attendee name exactly matches `parent_company_name` in master list.
+```
+Examples:
+- `Alphabet` → `Google LLC` (parent: `Alphabet Inc.`) ✅
+- `Meta` → `Instagram LLC` (parent: `Meta Platforms Inc.`) ✅
+- `Berkshire Hathaway` → `GEICO` (parent: `Berkshire Hathaway Inc.`) ✅
+```
 
-3. **R3: Historical / domain (country-scoped)**  
-   - **R3a**: historical by **email** → `company_name` → master (92)  
-   - **R3b**: historical by **domain** (majority/most-recent) → master  
-     → `R3b_hist_domain_company` (90) or `R3b_hist_domain_parent` (88)
+### **R3: Historical lookups** (confidence 90-92)
+**R3a: Email-based** (92) - Previous reconciliation by exact email address  
+**R3b: Domain-based** (90) - Majority/most-recent company for email domain
 
-4. **R4: Gemini AI-assisted matching** (only unresolved rows)  
-   - Use Gemini AI to suggest the best match from the exact master company list
-   - Show complete database context to Gemini for accurate suggestions
-   - **R4**: Gemini suggestion → exact match in master list (same country) → `R4_gemini_exact_match` (94)
-   - For unresolved cases, show Gemini suggestions in `logic_used` field for transparency
-   - Never accept AI outputs without **master-list exact validation**
+```
+Examples R3a (email history):
+- `john@microsoft.com` previously mapped to `Microsoft Corporation` ✅
+- Same email, different company name → use historical mapping
 
-Unmatched → `UNRESOLVED` (0).
+Examples R3b (domain history):
+- `@accenture.com` domain historically maps to `Accenture PLC` ✅
+- Multiple employees from same domain → use majority/recent mapping
+```
+
+### **R4: Fuzzy + AI-assisted matching** (confidence 85-94)
+**R4 Fuzzy**: High-confidence fuzzy matching (threshold 92%)  
+**R4 Gemini**: AI suggestions validated against master list
+
+```
+Examples R4 Fuzzy:
+- `Microsft` → `Microsoft Corporation` (94% similarity) ✅
+- `Amazn` → `Amazon.com Inc.` (91% similarity) ✅
+
+Examples R4 Gemini:
+- `Appel` → `Apple Inc.` (AI suggests: Apple Inc.(US), Appel Inc.(US), Apple Computer(US)...) ✅
+- `FB` → `Meta Platforms Inc.` (AI recognizes stock ticker) ✅
+- `MSFT` → `Microsoft Corporation` (AI knows abbreviations) ✅
+```
+
+### **Transparency Features**
+- **Gemini suggestions shown**: `logic_used` includes all AI suggestions with countries
+- **Format**: `R4_gemini_exact_match (suggestions: Apple Inc.(US); Appel Inc.(US); Apple Computer(US)...)`
+- **Unresolved cases**: Show AI suggestions even when no match found
+
+**Unmatched** → `UNRESOLVED (Gemini suggestions: CompanyA(US); CompanyB(GB)...)` (confidence 0)
 
 ---
 
 ## Quick start
 
-### Install
+### Install & Configure
+
+**Automatic Setup** (Recommended):
 ```bash
-pip install -r requirements.txt
-# or minimal (CSV version):
-pip install pandas rapidfuzz pyarrow tldextract pyyaml python-dotenv google-generativeai
+# The reconcile.py script automatically installs dependencies and creates config files
+python3 reconcile.py
 ```
 
-### Configure
-
-**Environment variables** (`.env`):
+**Manual Setup**:
 ```bash
-# Copy .env.example to .env and add your API keys
-cp .env.example .env
-# Edit .env with your actual API keys
-GEMINI_API_KEY=your_actual_key_here
+# Install dependencies
+pip install -r requirements.txt
+# or minimal:
+pip install pandas rapidfuzz pyarrow tldextract pyyaml python-dotenv google-generativeai
+
+# Create environment file
+echo "GEMINI_API_KEY=your_actual_key_here" > .env
 ```
 
 **Settings** (`.config`):
@@ -163,52 +198,89 @@ def norm_name(s):
 
 ---
 
-## Mini examples (input → output)
+## Detailed Examples (input → output)
 
 All examples are **country-scoped** and use normalized names.
 
-### R1 — Exact company + country
-**attendee**: `alex.jones@microsoft.com`, `Microsoft Ltd`, `GB`  
-**master**: (`Microsoft`, parent=`Microsoft Corporation`, `GB`)  
-**→ output**: `company_name=Microsoft`, confidence **100**, `logic_used=R1_exact_company_country`
+### R1 — Exact company + country (confidence 100)
+
+**Example 1**: Perfect match after normalization
+- **Attendee**: `alex@microsoft.com`, `Microsoft Corp`, `US`
+- **Master**: (`Microsoft Corporation`, parent=`Microsoft Corporation`, `US`)
+- **Normalized**: `microsoft` == `microsoft` ✅
+- **→ Output**: `Microsoft Corporation`, `logic_used=R1_exact_company_country`
+
+**Example 2**: Legal suffix removed
+- **Attendee**: `jane@apple.com`, `Apple`, `US`
+- **Master**: (`Apple Inc.`, parent=`Apple Inc.`, `US`)
+- **Normalized**: `apple` == `apple` ✅
+- **→ Output**: `Apple Inc.`, `logic_used=R1_exact_company_country`
 
 ---
 
-### R2 — Exact parent + country
-**attendee**: `priya.k@pwc.com`, `PricewaterhouseCoopers`, `GB`  
-**master**: (`PricewaterhouseCoopers LLP`, parent=`PricewaterhouseCoopers International Limited`, `GB`)  
-**→ output**: `company_name=PricewaterhouseCoopers LLP`, confidence **95**, `logic_used=R2_exact_parent_country`
+### R2 — Exact parent + country (confidence 95)
+
+**Example 1**: Parent company match
+- **Attendee**: `priya@google.com`, `Alphabet`, `US`
+- **Master**: (`Google LLC`, parent=`Alphabet Inc.`, `US`)
+- **Normalized**: `alphabet` == `alphabet` ✅
+- **→ Output**: `Google LLC`, `logic_used=R2_exact_parent_country`
+
+**Example 2**: Holding company
+- **Attendee**: `john@fb.com`, `Meta`, `US`
+- **Master**: (`Facebook Inc.`, parent=`Meta Platforms Inc.`, `US`)
+- **Normalized**: `meta` matches parent `meta platforms` ✅
+- **→ Output**: `Facebook Inc.`, `logic_used=R2_exact_parent_country`
 
 ---
 
-### R3a — Historical by email + country
-**attendee**: `jane.doe@acme.co.uk`, `ACME (UK)`, `GB`  
-**history**: `jane.doe@acme.co.uk` → `Acme Ltd` (GB)  
-**master**: (`Acme Ltd`, parent=`Acme Group plc`, `GB`)  
-**→ output**: `company_name=Acme Ltd`, confidence **92**, `logic_used=R3a_hist_email_exact`
+### R3a — Historical by email (confidence 92)
+
+**Example**: Previous reconciliation
+- **Attendee**: `jane.doe@acme.co.uk`, `ACME (UK)`, `GB`
+- **History**: `jane.doe@acme.co.uk` → `Acme Ltd` (GB)
+- **Master**: (`Acme Ltd`, parent=`Acme Group plc`, `GB`)
+- **→ Output**: `Acme Ltd`, `logic_used=R3a_hist_email_exact`
 
 ---
 
-### R3b — Historical by domain + country
-**attendee**: `sam.t@pwc.com`, `PwC`, `GB`  
-**history**: `pwc.com` in GB → majority `PricewaterhouseCoopers LLP`  
-**master**: (`PricewaterhouseCoopers LLP`, parent=`PricewaterhouseCoopers International Limited`, `GB`)  
-**→ output**: `company_name=PricewaterhouseCoopers LLP`, confidence **90**, `logic_used=R3b_hist_domain_company`
+### R3b — Historical by domain (confidence 90)
+
+**Example**: Domain majority mapping
+- **Attendee**: `sam.t@pwc.com`, `PwC`, `GB`
+- **History**: `@pwc.com` in GB → 80% map to `PricewaterhouseCoopers LLP`
+- **Master**: (`PricewaterhouseCoopers LLP`, parent=`PwC International`, `GB`)
+- **→ Output**: `PricewaterhouseCoopers LLP`, `logic_used=R3b_hist_domain_company`
 
 ---
 
-### R4 — Gemini AI-assisted matching
-**attendee**: `typo4@amazn.com`, `Amazn`, `US` (R1–R3 failed)  
-**Gemini context**: Shows complete US company list from master database  
-**Gemini suggestion**: `Amazon.com Inc.` (confidence assessment)  
-**validation**: Exact match found in master list for `Amazon.com Inc.` (US)  
-**→ output**: `company_name=Amazon.com Inc.`, confidence **94**, `logic_used=R4_gemini_exact_match`
+### R4 — Fuzzy + AI-assisted matching
+
+**R4 Fuzzy** (confidence 94): High similarity score
+- **Attendee**: `user@email.com`, `Microsft`, `US`
+- **Master**: (`Microsoft Corporation`, parent=`Microsoft Corporation`, `US`)
+- **Fuzzy Score**: 94% (above 92% threshold)
+- **→ Output**: `Microsoft Corporation`, `logic_used=R4_fuzzy_company_validated`
+
+**R4 Gemini** (confidence 94): AI assistance with transparency
+- **Attendee**: `user@apple.com`, `Appel`, `US` (fuzzy score 80% < threshold)
+- **Gemini Suggestions**: `Apple Inc.(US); Appel Inc.(US); Apple Computer(US); Appel Corporation(US); Apfel Inc.(US)`
+- **Validation**: `Apple Inc.` found in master list ✅
+- **→ Output**: `Apple Inc.`, `logic_used=R4_gemini_exact_match (suggestions: Apple Inc.(US); Appel Inc.(US); Apple Computer(US); Appel Corporation(US); Apfel Inc.(US))`
+
+**Complex AI case**: Stock ticker recognition
+- **Attendee**: `trader@fund.com`, `MSFT`, `US`
+- **Gemini Suggestions**: `Microsoft Corporation(US); Microsoft(US); Microsoft Inc.(US); MSFT Corporation(US); MS Corporation(US)`
+- **→ Output**: `Microsoft Corporation`, with full suggestion transparency
 
 ---
 
-### UNRESOLVED
-**attendee**: `tom@gmail.com`, `ABC`, `US` (free domain; no solid variations in US)  
-**→ output**: no match, confidence **0**, `logic_used=UNRESOLVED`
+### UNRESOLVED with AI transparency
+
+**Example**: No valid matches found
+- **Attendee**: `tom@gmail.com`, `XYZ Corp`, `FR` (no FR companies in database)
+- **Gemini Suggestions**: `Microsoft Corporation(US); Google LLC(US); Apple Inc.(US); Amazon.com Inc.(US); Meta Platforms Inc.(US)`
+- **→ Output**: no match, confidence **0**, `logic_used=UNRESOLVED (Gemini suggestions: Microsoft Corporation(US); Google LLC(US)...)`
 
 ---
 
@@ -233,12 +305,13 @@ Confidence bands are suggestions—tune to your data.
 .
 ├─ data/                # CSV files (attendee_list.csv, master_company_list.csv, etc.)
 ├─ output/              # Results (reconciliation_results.csv, unresolved_cases.csv, etc.)
-├─ reconcile.py         # Main reconciliation script
-├─ .config              # configuration file
-├─ .env.example         # environment variables template
-├─ .gitignore           # git ignore file
-├─ requirements.txt
-└─ README.md
+├─ reconcile.py         # Main reconciliation script (self-contained with auto-setup)
+├─ .config              # Configuration file (auto-created)
+├─ .env                 # Environment variables (auto-created)
+├─ .gitignore           # Git ignore file
+├─ requirements.txt     # Python dependencies
+├─ README.md            # This file
+└─ claude.md            # Technical documentation
 ```
 
 ---
